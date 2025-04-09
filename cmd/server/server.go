@@ -3,8 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/hex"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -14,14 +12,13 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/4chain-ag/go-overlay-services/pkg/appconfig"
 	"github.com/4chain-ag/go-overlay-services/pkg/core/engine"
-	"github.com/4chain-ag/go-overlay-services/pkg/core/gasp/core"
+	"github.com/4chain-ag/go-overlay-services/pkg/server"
 	"github.com/b-open-io/opns-overlay/opns"
 	"github.com/b-open-io/overlay/lookup/events"
 	"github.com/b-open-io/overlay/storage"
 	"github.com/bsv-blockchain/go-sdk/chainhash"
-	"github.com/bsv-blockchain/go-sdk/overlay"
-	"github.com/bsv-blockchain/go-sdk/overlay/lookup"
 	"github.com/bsv-blockchain/go-sdk/transaction"
 	"github.com/bsv-blockchain/go-sdk/transaction/broadcaster"
 	"github.com/bsv-blockchain/go-sdk/transaction/chaintracker/headers_client"
@@ -95,7 +92,7 @@ func main() {
 		log.Fatalf("Failed to initialize lookup service: %v", err)
 	}
 	tm := "tm_OpNS"
-	e := engine.Engine{
+	e := &engine.Engine{
 		Managers: map[string]engine.TopicManager{
 			tm: &opns.TopicManager{},
 		},
@@ -113,214 +110,142 @@ func main() {
 		PanicOnError: true,
 	}
 
-	// Create a new Fiber app
-	app := fiber.New()
-	app.Use(logger.New())
-	app.Use(compress.New())
-	app.Use(cors.New(cors.Config{AllowOrigins: "*"}))
-	// Define routes
-	app.Get("/", func(c *fiber.Ctx) error {
-		return c.SendString("Hello, World!")
-	})
-
-	app.Post("/submit", func(c *fiber.Ctx) error {
-		topicsHeader := c.Get("x-topics", "")
-		if topicsHeader == "" {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Missing x-topics header",
+	http, err := server.New(
+		server.WithFiberMiddleware(logger.New()),
+		server.WithFiberMiddleware(compress.New()),
+		server.WithFiberMiddleware(cors.New(cors.Config{AllowOrigins: "*"})),
+		server.WithEngine(e),
+		server.WithRouter(func(r fiber.Router) {
+			r.Get("", func(c *fiber.Ctx) error {
+				return c.SendString("Hello, World!")
 			})
-		}
-		taggedBeef := overlay.TaggedBEEF{}
-		if err := json.Unmarshal([]byte(topicsHeader), &taggedBeef.Topics); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid x-topics header",
-			})
-		}
-		taggedBeef.Beef = c.Body()
-		log.Println("Submitting beef:", hex.EncodeToString(taggedBeef.Beef))
-		if steak, err := e.Submit(c.Context(), taggedBeef, engine.SubmitModeCurrent, nil); err != nil {
-			log.Println("Error submitting:", err)
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		} else {
-			return c.JSON(steak)
-		}
-
-	})
-
-	app.Post("/requestSyncResponse", func(c *fiber.Ctx) error {
-		var request core.GASPInitialRequest
-		topic := c.Get("x-bsv-topic", "bsv21")
-		if err := c.BodyParser(&request); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid request",
-			})
-		} else if response, err := e.ProvideForeignSyncResponse(c.Context(), &request, topic); err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		} else {
-			return c.JSON(response)
-		}
-	})
-
-	app.Post("/requestForeignGASPNode", func(c *fiber.Ctx) error {
-		var request core.GASPNodeRequest
-		if err := c.BodyParser(&request); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid request",
-			})
-		} else if response, err := e.ProvideForeignGASPNode(
-			c.Context(),
-			request.GraphID,
-			&overlay.Outpoint{Txid: *request.Txid, OutputIndex: request.OutputIndex},
-		); err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		} else {
-			return c.JSON(response)
-		}
-	})
-
-	app.Post("/lookup", func(c *fiber.Ctx) error {
-		var question lookup.LookupQuestion
-		if err := c.BodyParser(&question); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid request",
-			})
-		} else if answer, err := e.Lookup(c.Context(), &question); err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		} else {
-			return c.JSON(answer)
-		}
-	})
-
-	app.Get("/owner/:name", func(c *fiber.Ctx) error {
-		name := c.Params("name")
-		if name == "" {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Missing name",
-			})
-		}
-		question := &events.Question{
-			Event: "opns:" + name,
-			Spent: &engine.FALSE,
-		}
-		if outputs, err := lookupService.LookupOutputs(c.Context(), question); err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		} else if len(outputs) == 0 {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "No answer found",
-			})
-		} else if events, err := lookupService.FindEvents(c.Context(), &outputs[0].Outpoint); err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		} else {
-			var address string
-			for _, event := range events {
-				if strings.HasPrefix(event, "p2pkh:") {
-					address = strings.TrimPrefix(event, "p2pkh:")
+			r.Get("/owner/:name", func(c *fiber.Ctx) error {
+				name := c.Params("name")
+				if name == "" {
+					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+						"error": "Missing name",
+					})
 				}
-			}
+				question := &events.Question{
+					Event: "opns:" + name,
+					Spent: &engine.FALSE,
+				}
+				if outputs, err := lookupService.LookupOutputs(c.Context(), question); err != nil {
+					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+						"error": err.Error(),
+					})
+				} else if len(outputs) == 0 {
+					return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+						"error": "No answer found",
+					})
+				} else if events, err := lookupService.FindEvents(c.Context(), &outputs[0].Outpoint); err != nil {
+					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+						"error": err.Error(),
+					})
+				} else {
+					var address string
+					for _, event := range events {
+						if strings.HasPrefix(event, "p2pkh:") {
+							address = strings.TrimPrefix(event, "p2pkh:")
+						}
+					}
 
-			return c.JSON(fiber.Map{
-				"address":  address,
-				"outpoint": outputs[0].Outpoint.OrdinalString(),
+					return c.JSON(fiber.Map{
+						"address":  address,
+						"outpoint": outputs[0].Outpoint.OrdinalString(),
+					})
+				}
 			})
-		}
-	})
 
-	app.Get("/mine/:name", func(c *fiber.Ctx) error {
-		name := c.Params("name")
-		if name == "" {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Missing name",
+			r.Get("/mine/:name", func(c *fiber.Ctx) error {
+				name := c.Params("name")
+				if name == "" {
+					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+						"error": "Missing name",
+					})
+				}
+				question := &events.Question{
+					Event: "mine:" + name,
+				}
+				if outputs, err := lookupService.LookupOutputs(c.Context(), question); err != nil {
+					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+						"error": err.Error(),
+					})
+				} else if len(outputs) == 0 {
+					return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+						"error": "No answer found",
+					})
+				} else {
+					return c.JSON(fiber.Map{
+						"outpoint": outputs[0].Outpoint.OrdinalString(),
+					})
+				}
 			})
-		}
-		question := &events.Question{
-			Event: "mine:" + name,
-		}
-		if outputs, err := lookupService.LookupOutputs(c.Context(), question); err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		} else if len(outputs) == 0 {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "No answer found",
-			})
-		} else {
-			return c.JSON(fiber.Map{
-				"outpoint": outputs[0].Outpoint.OrdinalString(),
-			})
-		}
-	})
 
-	app.Post("/arc-ingest", func(c *fiber.Ctx) error {
-		var status broadcaster.ArcResponse
-		if err := c.BodyParser(&status); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid request",
+			r.Post("/arc-ingest", func(c *fiber.Ctx) error {
+				var status broadcaster.ArcResponse
+				if err := c.BodyParser(&status); err != nil {
+					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+						"error": "Invalid request",
+					})
+				} else if txid, err := chainhash.NewHashFromHex(status.Txid); err != nil {
+					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+						"error": "Invalid txid",
+					})
+				} else if merklePath, err := transaction.NewMerklePathFromHex(status.MerklePath); err != nil {
+					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+						"error": "Invalid merkle path",
+					})
+				} else if err := e.HandleNewMerkleProof(c.Context(), txid, merklePath); err != nil {
+					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+						"error": err.Error(),
+					})
+				} else {
+					return c.JSON(fiber.Map{
+						"status": "success",
+					})
+				}
 			})
-		} else if txid, err := chainhash.NewHashFromHex(status.Txid); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid txid",
-			})
-		} else if merklePath, err := transaction.NewMerklePathFromHex(status.MerklePath); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid merkle path",
-			})
-		} else if err := e.HandleNewMerkleProof(c.Context(), txid, merklePath); err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": err.Error(),
-			})
-		} else {
-			return c.JSON(fiber.Map{
-				"status": "success",
-			})
-		}
-	})
 
-	app.Get("/subscribe/:topics", func(c *fiber.Ctx) error {
-		topicsParam := c.Params("topics")
-		if topicsParam == "" {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Missing topics",
+			r.Get("/subscribe/:topics", func(c *fiber.Ctx) error {
+				topicsParam := c.Params("topics")
+				if topicsParam == "" {
+					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+						"error": "Missing topics",
+					})
+				}
+				topics := strings.Split(topicsParam, ",")
+				if len(topics) == 0 {
+					return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+						"error": "No topics provided",
+					})
+				}
+
+				// Set headers for SSE
+				c.Set("Content-Type", "text/event-stream")
+				c.Set("Cache-Control", "no-cache")
+				c.Set("Connection", "keep-alive")
+
+				// Add the client to the topicClients map
+				writer := bufio.NewWriter(c.Context().Response.BodyWriter())
+				subReq := &subRequest{
+					topics: topics,
+					writer: writer,
+				}
+				subscribe <- subReq
+
+				// Wait for the client to disconnect
+				<-c.Context().Done()
+				unsubscribe <- subReq
+
+				log.Println("Client disconnected:", topics)
+				return nil
 			})
-		}
-		topics := strings.Split(topicsParam, ",")
-		if len(topics) == 0 {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "No topics provided",
-			})
-		}
-
-		// Set headers for SSE
-		c.Set("Content-Type", "text/event-stream")
-		c.Set("Cache-Control", "no-cache")
-		c.Set("Connection", "keep-alive")
-
-		// Add the client to the topicClients map
-		writer := bufio.NewWriter(c.Context().Response.BodyWriter())
-		subReq := &subRequest{
-			topics: topics,
-			writer: writer,
-		}
-		subscribe <- subReq
-
-		// Wait for the client to disconnect
-		<-c.Context().Done()
-		unsubscribe <- subReq
-
-		log.Println("Client disconnected:", topics)
-		return nil
-	})
+		}),
+		server.WithConfig(&appconfig.Config{
+			Port: PORT,
+		}),
+	)
 
 	// Start the Redis PubSub goroutine
 	go func() {
@@ -382,9 +307,9 @@ func main() {
 		cancel()
 
 		// Gracefully shut down the Fiber app
-		if err := app.Shutdown(); err != nil {
-			log.Fatalf("Error shutting down server: %v", err)
-		}
+		// if err := app.Shutdown(); err != nil {
+		// 	log.Fatalf("Error shutting down server: %v", err)
+		// }
 
 		// Close Redis connections
 		if err := rdb.Close(); err != nil {
@@ -445,7 +370,6 @@ func main() {
 		}
 	}
 	// Start the server on the specified port
-	if err := app.Listen(fmt.Sprintf(":%d", PORT)); err != nil {
-		log.Fatalf("Error starting server: %v", err)
-	}
+	<-http.StartWithGracefulShutdown(ctx)
+
 }
