@@ -5,7 +5,7 @@ go 1.24.2
 require (
 	github.com/4chain-ag/go-overlay-services v0.0.0-00010101000000-000000000000
 	github.com/GorillaPool/go-junglebus v0.2.14
-	github.com/b-open-io/overlay v0.0.0-00010101000000-000000000000
+	github.com/b-open-io/overlay v0.0.0-20250409215804-0af5fcd6d003
 	github.com/bitcoin-sv/go-paymail v0.23.0
 	github.com/bitcoin-sv/go-templates v0.0.0-00010101000000-000000000000
 	github.com/bsv-blockchain/go-sdk v1.1.22
@@ -76,6 +76,4 @@ replace github.com/4chain-ag/go-overlay-services => github.com/4chain-ag/go-over
 
 replace github.com/bsv-blockchain/go-sdk => github.com/b-open-io/go-sdk v1.1.22-0.20250406003733-6a6b9ac5b847
 
-replace github.com/bitcoin-sv/go-templates => ../go-templates
-
-replace github.com/b-open-io/overlay => ../overlay
+replace github.com/bitcoin-sv/go-templates => github.com/b-open-io/go-templates v0.0.0-20250409215400-150e0d4266fb
