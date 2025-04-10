@@ -98,9 +98,14 @@ func main() {
 		LookupServices: map[string]engine.LookupService{
 			"ls_OpNS": lookupService,
 		},
-		Storage:           store,
-		ChainTracker:      chaintracker,
-		SyncConfiguration: map[string]engine.SyncConfiguration{},
+		Storage:      store,
+		ChainTracker: chaintracker,
+		SyncConfiguration: map[string]engine.SyncConfiguration{
+			tm: {
+				Type:  engine.SyncConfigurationPeers,
+				Peers: peers,
+			},
+		},
 		Broadcaster: &broadcaster.Arc{
 			ApiUrl:  "https://arc.taal.com/v1",
 			WaitFor: broadcaster.ACCEPTED_BY_NETWORK,
