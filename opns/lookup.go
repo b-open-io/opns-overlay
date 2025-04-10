@@ -100,3 +100,66 @@ func (l *LookupService) GetMetaData() *overlay.MetaData {
 		Name: "Events",
 	}
 }
+
+type OwnerResult struct {
+	Outpoint *overlay.Outpoint `json:"outpoint"`
+	Address  string            `json:"address"`
+}
+
+func (l *LookupService) Owner(ctx context.Context, domain string) (*OwnerResult, error) {
+	question := &events.Question{
+		Event: "opns:" + domain,
+		Spent: &engine.FALSE,
+	}
+	if outpoints, err := l.LookupOutpoints(ctx, question); err != nil {
+		return nil, err
+	} else if len(outpoints) == 0 {
+		return nil, nil
+	} else if len(outpoints) > 1 {
+		return nil, fmt.Errorf("multiple outputs found for domain %s", domain)
+	} else if evts, err := l.FindEvents(ctx, outpoints[0]); err != nil {
+		return nil, err
+	} else {
+		for _, event := range evts {
+			if strings.HasPrefix(event, "p2pkh:") {
+				return &OwnerResult{
+					Outpoint: outpoints[0],
+					Address:  strings.TrimPrefix(event, "p2pkh:"),
+				}, nil
+			}
+		}
+		return nil, nil
+	}
+}
+
+type MineResult struct {
+	Outpoint *overlay.Outpoint `json:"outpoint"`
+	Domain   string            `json:"domain"`
+}
+
+func (l *LookupService) Mine(ctx context.Context, domain string) (*MineResult, error) {
+	question := &events.Question{
+		Event: "mine:" + domain,
+		Spent: &engine.FALSE,
+	}
+	if outpoints, err := l.LookupOutpoints(ctx, question); err != nil {
+		return nil, err
+	} else if len(outpoints) > 0 {
+		return nil, nil
+	}
+
+	for len(domain) > 5 {
+		question.Event = question.Event[:len(question.Event)-1]
+		if outpoints, err := l.LookupOutpoints(ctx, question); err != nil {
+			return nil, err
+		} else if len(outpoints) > 1 {
+			return nil, fmt.Errorf("multiple outputs found for domain %s", domain)
+		} else if len(outpoints) == 1 {
+			return &MineResult{
+				Outpoint: outpoints[0],
+				Domain:   strings.TrimPrefix(question.Event, "mine:"),
+			}, nil
+		}
+	}
+	return nil, nil
+}

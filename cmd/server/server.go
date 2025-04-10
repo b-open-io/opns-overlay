@@ -16,7 +16,6 @@ import (
 	"github.com/4chain-ag/go-overlay-services/pkg/core/engine"
 	"github.com/4chain-ag/go-overlay-services/pkg/server"
 	"github.com/b-open-io/opns-overlay/opns"
-	"github.com/b-open-io/overlay/lookup/events"
 	"github.com/b-open-io/overlay/storage"
 	"github.com/bsv-blockchain/go-sdk/chainhash"
 	"github.com/bsv-blockchain/go-sdk/transaction"
@@ -125,35 +124,16 @@ func main() {
 					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 						"error": "Missing name",
 					})
-				}
-				question := &events.Question{
-					Event: "opns:" + name,
-					Spent: &engine.FALSE,
-				}
-				if outputs, err := lookupService.LookupOutputs(c.Context(), question); err != nil {
+				} else if owner, err := lookupService.Owner(c.Context(), name); err != nil {
 					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 						"error": err.Error(),
 					})
-				} else if len(outputs) == 0 {
+				} else if owner == nil {
 					return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-						"error": "No answer found",
-					})
-				} else if events, err := lookupService.FindEvents(c.Context(), &outputs[0].Outpoint); err != nil {
-					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-						"error": err.Error(),
+						"error": "No owner found",
 					})
 				} else {
-					var address string
-					for _, event := range events {
-						if strings.HasPrefix(event, "p2pkh:") {
-							address = strings.TrimPrefix(event, "p2pkh:")
-						}
-					}
-
-					return c.JSON(fiber.Map{
-						"address":  address,
-						"outpoint": outputs[0].Outpoint.OrdinalString(),
-					})
+					return c.JSON(owner)
 				}
 			})
 
@@ -163,21 +143,17 @@ func main() {
 					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 						"error": "Missing name",
 					})
-				}
-				question := &events.Question{
-					Event: "mine:" + name,
-				}
-				if outputs, err := lookupService.LookupOutputs(c.Context(), question); err != nil {
+				} else if outpoint, err := lookupService.Mine(c.Context(), name); err != nil {
 					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 						"error": err.Error(),
 					})
-				} else if len(outputs) == 0 {
+				} else if outpoint == nil {
 					return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-						"error": "No answer found",
+						"error": "No outpoint found",
 					})
 				} else {
 					return c.JSON(fiber.Map{
-						"outpoint": outputs[0].Outpoint.OrdinalString(),
+						"outpoint": outpoint,
 					})
 				}
 			})
@@ -246,6 +222,9 @@ func main() {
 			Port: PORT,
 		}),
 	)
+	if err != nil {
+		log.Fatalf("Failed to create server: %v", err)
+	}
 
 	// Start the Redis PubSub goroutine
 	go func() {
@@ -322,47 +301,6 @@ func main() {
 		log.Println("Server stopped.")
 		os.Exit(0)
 	}()
-
-	// hack in paymail for now
-	// go func() {
-	// 	logger := logging.GetDefaultLogger()
-
-	// 	sl := server.PaymailServiceLocator{}
-	// 	sl.RegisterPaymailService(new(opnspaymail.OpnsServiceProvider))
-	// 	sl.RegisterPikeContactService(new(opnspaymail.OpnsServiceProvider))
-	// 	sl.RegisterPikePaymentService(new(opnspaymail.OpnsServiceProvider))
-
-	// 	var err error
-	// 	port := 3001
-	// 	// portEnv := os.Getenv("PORT")
-	// 	// if portEnv != "" {
-	// 	// 	if port, err = strconv.Atoi(portEnv); err != nil {
-	// 	// 		logger.Fatal().Msg(err.Error())
-	// 	// 	}
-	// 	// }
-	// 	// Custom server with lots of customizable goodies
-	// 	config, err := server.NewConfig(
-	// 		&sl,
-	// 		server.WithBasicRoutes(),
-	// 		server.WithP2PCapabilities(),
-	// 		server.WithBeefCapabilities(),
-	// 		// server.WithDomain("1sat.app"),
-	// 		server.WithDomain(os.Getenv("PAYMAIL_DOMAIN")),
-	// 		// server.WithDomain("localhost:3000"),
-	// 		// server.WithGenericCapabilities(),
-	// 		server.WithPort(port),
-	// 		// server.WithServiceName("BsvAliasCustom"),
-	// 		server.WithTimeout(15*time.Second),
-	// 		// server.WithCapabilities(customCapabilities()),
-	// 	)
-	// 	if err != nil {
-	// 		logger.Fatal().Msg(err.Error())
-	// 	}
-	// 	config.Prefix = "https://" //normally paymail requires https, but for demo purposes we'll use http
-
-	// 	// Create & start the server
-	// 	server.StartServer(server.CreateServer(config), config.Logger)
-	// }()
 
 	if SYNC {
 		if err := e.StartGASPSync(context.Background()); err != nil {

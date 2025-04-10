@@ -1,4 +1,4 @@
-package opnspaymail
+package main
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 
 // Example demo implementation of a service provider
 type OpnsServiceProvider struct {
+
 	// Extend your dependencies or custom values
 }
 
