@@ -8,8 +8,8 @@ github.com/b-open-io/go-sdk v1.1.22-0.20250406003733-6a6b9ac5b847 h1:wf6mbH1/Sqs
 github.com/b-open-io/go-sdk v1.1.22-0.20250406003733-6a6b9ac5b847/go.mod h1:IWyjkqNHCxZejsqT+POnDVU8dNxBQfvFtc8j/tdtsFQ=
 github.com/b-open-io/go-templates v0.0.0-20250409215400-150e0d4266fb h1:YibiD4MaMUQOIYX4B8LU8In4Q8GvrW2SJhLyOYD+aOg=
 github.com/b-open-io/go-templates v0.0.0-20250409215400-150e0d4266fb/go.mod h1:CQCMZGDNXHdLY9RibFKRAjAJP4tJkg3R0sYpKFmXoR0=
-github.com/b-open-io/overlay v0.0.0-20250409215804-0af5fcd6d003 h1:ATODAP1XJOgNAiUoW95M187Hgg96MjRdtRIXRY4d/Io=
-github.com/b-open-io/overlay v0.0.0-20250409215804-0af5fcd6d003/go.mod h1:xfvd6+uvSI3iCuYecd1mIw56f0Y9pohPFutlA0wjoY8=
+github.com/b-open-io/overlay v0.0.0-20250410011757-7ad9a081bf7b h1:Y4hoE8Qx6Nq8Nl//hb/CQAdacHPMjmp1X8T1V5lH8BM=
+github.com/b-open-io/overlay v0.0.0-20250410011757-7ad9a081bf7b/go.mod h1:qoILq4tVZdlMS5FvZv91wIHHQDUdfe2RhZ7OsaGr1Sk=
 github.com/bitcoin-sv/go-paymail v0.23.0 h1:Z7C0MddmkZZdpBDDjygWD9o83qH8m89/2O+Pz5YDku8=
 github.com/bitcoin-sv/go-paymail v0.23.0/go.mod h1:UXsOR2QVzOSlzOaUPH/ySeG0/tkHgmD8iMNJ3bLbh/E=
 github.com/bitcoin-sv/go-sdk v1.1.18 h1:6lMdQGxlLFWysR2O4m8t0FpdEmdvqHIvYjp8+UV8AjI=

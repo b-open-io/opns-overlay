@@ -103,3 +103,5 @@ replace github.com/4chain-ag/go-overlay-services => github.com/4chain-ag/go-over
 replace github.com/bsv-blockchain/go-sdk => github.com/b-open-io/go-sdk v1.1.22-0.20250406003733-6a6b9ac5b847
 
 replace github.com/bitcoin-sv/go-templates => github.com/b-open-io/go-templates v0.0.0-20250409215400-150e0d4266fb
+
+replace github.com/b-open-io/overlay => github.com/b-open-io/overlay v0.0.0-20250410011757-7ad9a081bf7b
