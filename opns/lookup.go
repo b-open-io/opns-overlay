@@ -102,8 +102,8 @@ func (l *LookupService) GetMetaData() *overlay.MetaData {
 }
 
 type OwnerResult struct {
-	Outpoint string `json:"outpoint"`
-	Address  string `json:"address"`
+	Outpoint *overlay.Outpoint `json:"outpoint"`
+	Address  string            `json:"address"`
 }
 
 func (l *LookupService) Owner(ctx context.Context, domain string) (*OwnerResult, error) {
@@ -123,7 +123,7 @@ func (l *LookupService) Owner(ctx context.Context, domain string) (*OwnerResult,
 		for _, event := range evts {
 			if strings.HasPrefix(event, "p2pkh:") {
 				return &OwnerResult{
-					Outpoint: outpoints[0].OrdinalString(),
+					Outpoint: outpoints[0],
 					Address:  strings.TrimPrefix(event, "p2pkh:"),
 				}, nil
 			}
@@ -133,8 +133,8 @@ func (l *LookupService) Owner(ctx context.Context, domain string) (*OwnerResult,
 }
 
 type MineResult struct {
-	Outpoint string `json:"outpoint"`
-	Domain   string `json:"domain"`
+	Outpoint *overlay.Outpoint `json:"outpoint"`
+	Domain   string            `json:"domain"`
 }
 
 func (l *LookupService) Mine(ctx context.Context, domain string) (*MineResult, error) {
@@ -156,7 +156,7 @@ func (l *LookupService) Mine(ctx context.Context, domain string) (*MineResult, e
 			return nil, fmt.Errorf("multiple outputs found for domain %s", domain)
 		} else if len(outpoints) == 1 {
 			return &MineResult{
-				Outpoint: outpoints[0].OrdinalString(),
+				Outpoint: outpoints[0],
 				Domain:   strings.TrimPrefix(question.Event, "mine:"),
 			}, nil
 		}
