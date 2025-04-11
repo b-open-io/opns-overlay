@@ -48,6 +48,9 @@ func (l *LookupService) OutputAdded(ctx context.Context, outpoint *overlay.Outpo
 		satsIn := uint64(0)
 		for _, input := range tx.Inputs {
 			sourceOut := input.SourceTxOutput()
+			if sourceOut == nil {
+				break
+			}
 			if satsIn < satsOut {
 				satsIn += sourceOut.Satoshis
 				continue

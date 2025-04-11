@@ -4,12 +4,16 @@ import (
 	"context"
 	"errors"
 
+	"github.com/4chain-ag/go-overlay-services/pkg/core/engine"
 	"github.com/bitcoin-sv/go-templates/template/opns"
 	"github.com/bsv-blockchain/go-sdk/overlay"
 	"github.com/bsv-blockchain/go-sdk/transaction"
 )
 
-type TopicManager struct{}
+type TopicManager struct {
+	Storage engine.Storage
+	Topic   string
+}
 
 func (tm *TopicManager) IdentifyAdmissableOutputs(ctx context.Context, beefBytes []byte, previousCoins map[uint32][]byte) (admit overlay.AdmittanceInstructions, err error) {
 	_, tx, txid, err := transaction.ParseBeef(beefBytes)
