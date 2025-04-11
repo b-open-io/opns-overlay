@@ -17,6 +17,7 @@ import (
 	"github.com/4chain-ag/go-overlay-services/pkg/server"
 	"github.com/b-open-io/opns-overlay/opns"
 	"github.com/b-open-io/overlay/storage"
+	"github.com/b-open-io/overlay/util"
 	"github.com/bsv-blockchain/go-sdk/chainhash"
 	"github.com/bsv-blockchain/go-sdk/transaction"
 	"github.com/bsv-blockchain/go-sdk/transaction/broadcaster"
@@ -76,7 +77,11 @@ func main() {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
 
-	store, err := storage.NewRedisStorage(os.Getenv("REDIS"))
+	txStore, err := util.NewRedisTxStorage(os.Getenv("REDIS_BEEF"))
+	if err != nil {
+		log.Fatalf("Failed to initialize tx storage: %v", err)
+	}
+	store, err := storage.NewRedisStorage(os.Getenv("REDIS"), txStore)
 	if err != nil {
 		log.Fatalf("Failed to initialize storage: %v", err)
 	}

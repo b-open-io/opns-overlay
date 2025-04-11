@@ -1,5 +1,5 @@
-github.com/4chain-ag/go-overlay-services v0.1.1-0.20250410035058-267be6c146c1 h1:bX14u5pwKdq4unKtMpnKZZi3YoqHENq3k/QETFAQ2Hc=
-github.com/4chain-ag/go-overlay-services v0.1.1-0.20250410035058-267be6c146c1/go.mod h1:1pdVZIxyurvrkZD2V50lse5rTefgW2kYDUepxIMIiaU=
+github.com/4chain-ag/go-overlay-services v0.1.1-0.20250411221908-ca4636c788cd h1:KmxqjQXJnYsHjWZZMk8yeVvcYqRETXCb5M1/aUhfLhc=
+github.com/4chain-ag/go-overlay-services v0.1.1-0.20250411221908-ca4636c788cd/go.mod h1:1pdVZIxyurvrkZD2V50lse5rTefgW2kYDUepxIMIiaU=
 github.com/GorillaPool/go-junglebus v0.2.14 h1:dnGU3LIZ21JiHeeSRW0Yn5xvSHKgiN0T/t3cioABtyg=
 github.com/GorillaPool/go-junglebus v0.2.14/go.mod h1:EMAAnFQbBQB7xLe7DdLTLbescKUudflsXT0CqlSeWgQ=
 github.com/andybalholm/brotli v1.1.1 h1:PR2pgnyFznKEugtsUo0xLdDop5SKXd5Qf5ysW+7XdTA=
@@ -8,8 +8,8 @@ github.com/b-open-io/go-sdk v1.1.22-0.20250406003733-6a6b9ac5b847 h1:wf6mbH1/Sqs
 github.com/b-open-io/go-sdk v1.1.22-0.20250406003733-6a6b9ac5b847/go.mod h1:IWyjkqNHCxZejsqT+POnDVU8dNxBQfvFtc8j/tdtsFQ=
 github.com/b-open-io/go-templates v0.0.0-20250409215400-150e0d4266fb h1:YibiD4MaMUQOIYX4B8LU8In4Q8GvrW2SJhLyOYD+aOg=
 github.com/b-open-io/go-templates v0.0.0-20250409215400-150e0d4266fb/go.mod h1:CQCMZGDNXHdLY9RibFKRAjAJP4tJkg3R0sYpKFmXoR0=
-github.com/b-open-io/overlay v0.0.0-20250410025622-46390cf969f0 h1:gm9B6npzM9XRzzjhjeFPmp3wkxUXcg9EdHC6i+7eDkI=
-github.com/b-open-io/overlay v0.0.0-20250410025622-46390cf969f0/go.mod h1:qoILq4tVZdlMS5FvZv91wIHHQDUdfe2RhZ7OsaGr1Sk=
+github.com/b-open-io/overlay v0.0.0-20250411222026-d3ff8dceb857 h1:Im4m8LCAOkgbAlTzco2c4+VfmIPdOGbwEcm22fV7++Y=
+github.com/b-open-io/overlay v0.0.0-20250411222026-d3ff8dceb857/go.mod h1:qoILq4tVZdlMS5FvZv91wIHHQDUdfe2RhZ7OsaGr1Sk=
 github.com/bitcoin-sv/go-paymail v0.23.0 h1:Z7C0MddmkZZdpBDDjygWD9o83qH8m89/2O+Pz5YDku8=
 github.com/bitcoin-sv/go-paymail v0.23.0/go.mod h1:UXsOR2QVzOSlzOaUPH/ySeG0/tkHgmD8iMNJ3bLbh/E=
 github.com/bitcoin-sv/go-sdk v1.1.18 h1:6lMdQGxlLFWysR2O4m8t0FpdEmdvqHIvYjp8+UV8AjI=

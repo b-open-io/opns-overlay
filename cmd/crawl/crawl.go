@@ -31,6 +31,7 @@ var JUNGLEBUS = "https://texas1.junglebus.gorillapool.io"
 var jb *junglebus.Client
 var chaintracker headers_client.Client
 var SPENDS = false
+var CONCURRENCY = 1
 
 type tokenSummary struct {
 	tx   int
@@ -51,6 +52,7 @@ func init() {
 
 func main() {
 	flag.BoolVar(&SPENDS, "s", false, "Start sync")
+	flag.IntVar(&CONCURRENCY, "c", 1, "Concurrency")
 	flag.Parse()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -73,7 +75,11 @@ func main() {
 		rdb = redis.NewClient(opts)
 	}
 	// Initialize store
-	store, err := storage.NewRedisStorage(os.Getenv("REDIS"))
+	txStore, err := util.NewRedisTxStorage(os.Getenv("REDIS_BEEF"))
+	if err != nil {
+		log.Fatalf("Failed to initialize tx storage: %v", err)
+	}
+	store, err := storage.NewRedisStorage(os.Getenv("REDIS"), txStore)
 	if err != nil {
 		log.Fatalf("Failed to initialize storage: %v", err)
 	}
@@ -100,7 +106,7 @@ func main() {
 		PanicOnError: true,
 	}
 
-	limiter := make(chan struct{}, 128)
+	limiter := make(chan struct{}, CONCURRENCY)
 	done := make(chan *tokenSummary, 1000)
 	queue := make(chan *chainhash.Hash, 1000)
 
@@ -196,7 +202,7 @@ func main() {
 				// log.Println("Processing", txidStr)
 				if txid, err := chainhash.NewHashFromHex(txidStr); err != nil {
 					log.Fatalf("Invalid txid: %v", err)
-				} else if tx, err := util.LoadTx(ctx, txid); err != nil {
+				} else if tx, err := txStore.LoadTx(ctx, txid); err != nil {
 					log.Fatalf("Failed to load transaction: %v", err)
 				} else {
 					logTime := time.Now()
@@ -205,7 +211,7 @@ func main() {
 						Transactions: map[string]*transaction.BeefTx{},
 					}
 					for _, input := range tx.Inputs {
-						if input.SourceTransaction, err = util.LoadTx(ctx, input.SourceTXID); err != nil {
+						if input.SourceTransaction, err = txStore.LoadTx(ctx, input.SourceTXID); err != nil {
 							log.Fatalf("Failed to load source transaction: %v", err)
 						} else if _, err := beef.MergeTransaction(input.SourceTransaction); err != nil {
 							log.Fatalf("Failed to merge source transaction: %v", err)

@@ -11,7 +11,7 @@ import (
 
 type TopicManager struct{}
 
-func (tm *TopicManager) IdentifyAdmissableOutputs(ctx context.Context, beefBytes []byte, previousCoins []uint32) (admit overlay.AdmittanceInstructions, err error) {
+func (tm *TopicManager) IdentifyAdmissableOutputs(ctx context.Context, beefBytes []byte, previousCoins map[uint32][]byte) (admit overlay.AdmittanceInstructions, err error) {
 	_, tx, txid, err := transaction.ParseBeef(beefBytes)
 	if err != nil {
 		return admit, err
@@ -28,18 +28,29 @@ func (tm *TopicManager) IdentifyAdmissableOutputs(ctx context.Context, beefBytes
 	}
 
 	ancillaryTxids := make(map[string]struct{})
-	for vin := range previousCoins {
-		sourceOutput := tx.Inputs[vin].SourceTxOutput()
-		ancillaryTxids[tx.Inputs[vin].SourceTXID.String()] = struct{}{}
-		if o := opns.Decode(sourceOutput.LockingScript); o != nil || tx.Inputs[vin].SourceTXID.Equal(opns.GENESIS.Txid) {
-			admit.CoinsToRetain = previousCoins
+	for vin, inputBeef := range previousCoins {
+		sourceTx, err := transaction.NewTransactionFromBEEF(inputBeef)
+		if err != nil {
+			return admit, err
+		}
+		txin := tx.Inputs[vin]
+		txout := sourceTx.Outputs[txin.SourceTxOutIndex]
+		if o := opns.Decode(txout.LockingScript); o != nil || txin.SourceTXID.Equal(opns.GENESIS.Txid) {
+			admit.CoinsToRetain = append(admit.CoinsToRetain, vin)
 			admit.OutputsToAdmit = []uint32{0, 1, 2}
-			return
-		} else if sourceOutput.Satoshis == 1 {
+		} else if txout.Satoshis == 1 {
 			satsIn := uint64(0)
+			missingInput := false
 			for _, input := range tx.Inputs[:vin] {
-				satsIn += input.SourceTxOutput().Satoshis
-				ancillaryTxids[input.SourceTXID.String()] = struct{}{}
+				sourceTxOut := input.SourceTxOutput()
+				if sourceTxOut == nil {
+					missingInput = true
+					break
+				}
+				satsIn += sourceTxOut.Satoshis
+			}
+			if missingInput {
+				continue
 			}
 			satsOut := uint64(0)
 			for vout, output := range tx.Outputs {
@@ -50,7 +61,13 @@ func (tm *TopicManager) IdentifyAdmissableOutputs(ctx context.Context, beefBytes
 					if output.Satoshis == 0 {
 						continue
 					} else if output.Satoshis == 1 {
-						admit.CoinsToRetain = previousCoins
+						for _, input := range tx.Inputs[:vin] {
+							if _, ok := ancillaryTxids[input.SourceTXID.String()]; !ok {
+								ancillaryTxids[input.SourceTXID.String()] = struct{}{}
+								admit.AncillaryTxids = append(admit.AncillaryTxids, input.SourceTXID)
+							}
+						}
+						admit.CoinsToRetain = append(admit.CoinsToRetain, vin)
 						admit.OutputsToAdmit = append(admit.OutputsToAdmit, uint32(vout))
 					}
 				}
