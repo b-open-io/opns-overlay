@@ -254,7 +254,7 @@ func main() {
 				return nil
 			})
 		}),
-		server.WithConfig(&appconfig.Config{
+		server.WithConfig(&server.Config{
 			Port: PORT,
 		}),
 	)
