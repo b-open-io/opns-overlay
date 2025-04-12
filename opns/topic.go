@@ -3,6 +3,7 @@ package opns
 import (
 	"context"
 	"errors"
+	"log"
 
 	"github.com/4chain-ag/go-overlay-services/pkg/core/engine"
 	"github.com/bitcoin-sv/go-templates/template/opns"
@@ -27,6 +28,8 @@ func (tm *TopicManager) IdentifyAdmissableOutputs(ctx context.Context, beefBytes
 	} else if len(previousCoins) == 0 {
 		return
 	}
+	txidStr := txid.String()
+	log.Println("Identifying admissible outputs for txid:", txidStr)
 	for vin, inputBeefBytes := range previousCoins {
 		if tx.Inputs[vin].SourceTransaction, err = transaction.NewTransactionFromBEEF(inputBeefBytes); err != nil {
 			return admit, err
