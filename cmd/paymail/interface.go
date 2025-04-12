@@ -3,10 +3,9 @@ package main
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
-	"net/http"
-	"os"
+	"errors"
 
+	"github.com/b-open-io/opns-overlay/opns"
 	"github.com/bitcoin-sv/go-paymail"
 	"github.com/bitcoin-sv/go-paymail/server"
 	"github.com/bitcoin-sv/go-paymail/spv"
@@ -14,10 +13,8 @@ import (
 	"github.com/bsv-blockchain/go-sdk/transaction/template/p2pkh"
 )
 
-// Example demo implementation of a service provider
 type OpnsServiceProvider struct {
-
-	// Extend your dependencies or custom values
+	Lookup *opns.LookupService
 }
 
 type Opns struct {
@@ -33,24 +30,16 @@ type OwnerResult struct {
 	Address  string `json:"address"`
 }
 
-// GetPaymailByAlias is a demo implementation of this interface
-func (d *OpnsServiceProvider) GetAddressStringByAlias(_ context.Context, alias, domain string) (string, error) {
+var ErrNotFound = errors.New("not found")
 
-	address := ""
-
-	if resp, err := http.Get(os.Getenv("HOSTING_URL") + "/owner/" + alias); err != nil {
-		return address, err
+func (p *OpnsServiceProvider) GetAddressStringByAlias(ctx context.Context, alias, domain string) (string, error) {
+	if result, err := p.Lookup.Owner(ctx, alias); err != nil {
+		return "", err
+	} else if result == nil {
+		return "", ErrNotFound
 	} else {
-
-		var result *OwnerResult
-		defer resp.Body.Close()
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			return address, err
-		}
-
-		address = result.Address
+		return result.Address, nil
 	}
-	return address, nil
 }
 
 // GetPaymailByAlias is a demo implementation of this interface
