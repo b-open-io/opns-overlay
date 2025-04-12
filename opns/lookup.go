@@ -2,7 +2,6 @@ package opns
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -31,16 +30,15 @@ func NewLookupService(connString string, storage engine.Storage, topic string) (
 	}
 }
 
-func (l *LookupService) OutputAdded(ctx context.Context, outpoint *overlay.Outpoint, outputScript *script.Script, topic string, blockHeight uint32, blockIdx uint64) error {
+func (l *LookupService) OutputAdded(ctx context.Context, outpoint *overlay.Outpoint, topic string, beef []byte) error {
 	outputEvents := make([]string, 0, 5)
 	var domain string
-	if output, err := l.Storage.FindOutput(ctx, outpoint, &l.Topic, nil, true); err != nil {
+	_, tx, _, err := transaction.ParseBeef(beef)
+	if err != nil {
 		return err
-	} else if output == nil {
-		return errors.New("output not found")
-	} else if tx, err := transaction.NewTransactionFromBEEF(output.Beef); err != nil {
-		return err
-	} else {
+	}
+	txOut := tx.Outputs[outpoint.OutputIndex]
+	if txOut.Satoshis == 1 {
 		satsOut := uint64(0)
 		for _, output := range tx.Outputs[:outpoint.OutputIndex] {
 			satsOut += output.Satoshis
@@ -54,7 +52,7 @@ func (l *LookupService) OutputAdded(ctx context.Context, outpoint *overlay.Outpo
 			if satsIn < satsOut {
 				satsIn += sourceOut.Satoshis
 				continue
-			} else if satsIn == satsOut {
+			} else if satsIn == satsOut && sourceOut.Satoshis == 1 {
 				outpoint := &overlay.Outpoint{
 					Txid:        *input.SourceTXID,
 					OutputIndex: input.SourceTxOutIndex,
@@ -66,17 +64,20 @@ func (l *LookupService) OutputAdded(ctx context.Context, outpoint *overlay.Outpo
 						if strings.HasPrefix(event, "opns:") {
 							domain = strings.TrimPrefix(event, "opns:")
 							outputEvents = append(outputEvents, event)
-							break
+						} else if strings.HasPrefix(event, "origin:") {
+							outputEvents = append(outputEvents, event)
 						}
 					}
 					break
 				}
+			} else {
+				outputEvents = append(outputEvents, "origin:"+outpoint.OrdinalString())
 			}
 		}
 	}
-	if o := opns.Decode(outputScript); o != nil {
+	if o := opns.Decode(txOut.LockingScript); o != nil {
 		outputEvents = append(outputEvents, "mine:"+o.Domain)
-	} else if insc := inscription.Decode(outputScript); insc != nil && insc.File.Type == "application/op-ns" {
+	} else if insc := inscription.Decode(txOut.LockingScript); insc != nil && insc.File.Type == "application/op-ns" {
 		domain = string(insc.File.Content)
 		outputEvents = append(outputEvents, "opns:"+domain)
 		if p := p2pkh.Decode(script.NewFromBytes(insc.ScriptPrefix), true); p != nil {
@@ -85,10 +86,21 @@ func (l *LookupService) OutputAdded(ctx context.Context, outpoint *overlay.Outpo
 			outputEvents = append(outputEvents, fmt.Sprintf("p2pkh:%s", p.AddressString))
 		}
 	}
-	if p := p2pkh.Decode(outputScript, true); p != nil {
+	if p := p2pkh.Decode(txOut.LockingScript, true); p != nil {
 		outputEvents = append(outputEvents, fmt.Sprintf("p2pkh:%s", p.AddressString))
-	} else if ol := ordlock.Decode(outputScript); ol != nil && domain != "" {
+	} else if ol := ordlock.Decode(txOut.LockingScript); ol != nil && domain != "" {
 		outputEvents = append(outputEvents, fmt.Sprintf("list:%s", domain))
+	}
+	var blockHeight uint32
+	var blockIdx uint64
+	if tx.MerklePath != nil {
+		blockHeight = tx.MerklePath.BlockHeight
+		for _, leaf := range tx.MerklePath.Path[0] {
+			if leaf.Hash != nil && leaf.Hash.Equal(outpoint.Txid) {
+				blockIdx = leaf.Offset
+				break
+			}
+		}
 	}
 	l.SaveEvents(ctx, outpoint, outputEvents, blockHeight, blockIdx)
 	return nil
