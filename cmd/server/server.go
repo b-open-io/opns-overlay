@@ -36,6 +36,7 @@ var PORT int
 var SYNC bool
 var rdb, sub *redis.Client
 var peers = []string{}
+var e *engine.Engine
 
 type subRequest struct {
 	topics  []string
@@ -97,7 +98,7 @@ func main() {
 		log.Fatalf("Failed to initialize lookup service: %v", err)
 	}
 	tm := "tm_OpNS"
-	e := &engine.Engine{
+	e = &engine.Engine{
 		Managers: map[string]engine.TopicManager{
 			tm: &opns.TopicManager{},
 		},
@@ -121,7 +122,7 @@ func main() {
 		PanicOnError: true,
 	}
 
-	http, err := server.New(
+	httpServer, err := server.New(
 		server.WithFiberMiddleware(logger.New()),
 		server.WithFiberMiddleware(compress.New()),
 		server.WithFiberMiddleware(cors.New(cors.Config{AllowOrigins: "*"})),
@@ -335,10 +336,32 @@ func main() {
 			if err := e.StartGASPSync(context.Background()); err != nil {
 				log.Fatalf("Error starting sync: %v", err)
 			}
-			// Todo: Subscribe to topics via SSE
+			// for topic, syncConfig := range e.SyncConfiguration {
+			// 	if syncConfig.Type == engine.SyncConfigurationPeers {
+			// 		for _, peer := range syncConfig.Peers {
+			// 			go func(peer string) {
+			// 				req, _ := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/subscribe/%s", peer, topic))
+			// 				res, err := http.DefaultClient.Do(req)
+			// 				if err != nil {
+			// 					// handle error
+			// 				}
+			// 				defer res.Body.Close() // don't forget!!
+
+			// 				for ev, err := range sse.Read(res.Body, nil) {
+			// 					if err != nil {
+			// 						// handle read error
+			// 						break // can end the loop as Read stops on first error anyway
+			// 					}
+			// 					// Do something with the events, parse the JSON or whatever.
+			// 				}
+			// 			}(peer)
+			// 		}
+			// 	}
+			// }
+
 		}()
 	}
 	// Start the server on the specified port
-	<-http.StartWithGracefulShutdown(ctx)
+	<-httpServer.StartWithGracefulShutdown(ctx)
 
 }

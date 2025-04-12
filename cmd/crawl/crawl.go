@@ -230,22 +230,22 @@ func main() {
 					} else if admit, err := e.Submit(ctx, taggedBeef, engine.SubmitModeHistorical, nil); err != nil {
 						log.Fatalf("Failed to submit transaction: %v", err)
 					} else {
-						for _, vout := range admit[tm].OutputsToAdmit {
-							if spend, err := lookupSpend(&overlay.Outpoint{
-								Txid:        *txid,
-								OutputIndex: vout,
-							}); err != nil {
-								log.Fatalf("Failed to lookup spend: %v", err)
-							} else if spend != nil {
-								if err := rdb.ZAdd(ctx, "opns", redis.Z{
-									Score:  float64(time.Now().UnixNano()),
-									Member: spend.String(),
-								}).Err(); err != nil {
-									log.Fatalf("Failed to add spend to queue: %v", err)
-								}
-								queue <- spend
-							}
-						}
+						// for _, vout := range admit[tm].OutputsToAdmit {
+						// 	if spend, err := lookupSpend(&overlay.Outpoint{
+						// 		Txid:        *txid,
+						// 		OutputIndex: vout,
+						// 	}); err != nil {
+						// 		log.Fatalf("Failed to lookup spend: %v", err)
+						// 	} else if spend != nil {
+						// 		if err := rdb.ZAdd(ctx, "opns", redis.Z{
+						// 			Score:  float64(time.Now().UnixNano()),
+						// 			Member: spend.String(),
+						// 		}).Err(); err != nil {
+						// 			log.Fatalf("Failed to add spend to queue: %v", err)
+						// 		}
+						// 		queue <- spend
+						// 	}
+						// }
 						if err := rdb.ZRem(ctx, "opns", txidStr).Err(); err != nil {
 							log.Fatalf("Failed to delete from queue: %v", err)
 						}
