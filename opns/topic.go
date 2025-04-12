@@ -16,7 +16,7 @@ type TopicManager struct {
 }
 
 func (tm *TopicManager) IdentifyAdmissableOutputs(ctx context.Context, beefBytes []byte, previousCoins map[uint32][]byte) (admit overlay.AdmittanceInstructions, err error) {
-	beef, tx, txid, err := transaction.ParseBeef(beefBytes)
+	_, tx, txid, err := transaction.ParseBeef(beefBytes)
 	if err != nil {
 		return admit, err
 	} else if tx == nil {
@@ -27,10 +27,8 @@ func (tm *TopicManager) IdentifyAdmissableOutputs(ctx context.Context, beefBytes
 	} else if len(previousCoins) == 0 {
 		return
 	}
-	for _, inputBeefBytes := range previousCoins {
-		if inputBeef, err := transaction.NewBeefFromBytes(inputBeefBytes); err != nil {
-			return admit, err
-		} else if err := beef.MergeBeef(inputBeef); err != nil {
+	for vin, inputBeefBytes := range previousCoins {
+		if tx.Inputs[vin].SourceTransaction, err = transaction.NewTransactionFromBEEF(inputBeefBytes); err != nil {
 			return admit, err
 		}
 	}

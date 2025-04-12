@@ -13,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/4chain-ag/go-overlay-services/pkg/appconfig"
 	"github.com/4chain-ag/go-overlay-services/pkg/core/engine"
 	"github.com/4chain-ag/go-overlay-services/pkg/server"
 	"github.com/b-open-io/opns-overlay/opns"
