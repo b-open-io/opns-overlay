@@ -108,8 +108,9 @@ func main() {
 		ChainTracker: chaintracker,
 		SyncConfiguration: map[string]engine.SyncConfiguration{
 			tm: {
-				Type:  engine.SyncConfigurationPeers,
-				Peers: peers,
+				Type:        engine.SyncConfigurationPeers,
+				Peers:       peers,
+				Concurrency: 1,
 			},
 		},
 		Broadcaster: &broadcaster.Arc{
