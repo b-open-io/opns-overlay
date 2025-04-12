@@ -16,7 +16,7 @@ type TopicManager struct {
 }
 
 func (tm *TopicManager) IdentifyAdmissableOutputs(ctx context.Context, beefBytes []byte, previousCoins map[uint32][]byte) (admit overlay.AdmittanceInstructions, err error) {
-	_, tx, txid, err := transaction.ParseBeef(beefBytes)
+	beef, tx, txid, err := transaction.ParseBeef(beefBytes)
 	if err != nil {
 		return admit, err
 	} else if tx == nil {
@@ -27,15 +27,21 @@ func (tm *TopicManager) IdentifyAdmissableOutputs(ctx context.Context, beefBytes
 	} else if len(previousCoins) == 0 {
 		return
 	}
+	for _, inputBeefBytes := range previousCoins {
+		if inputBeef, err := transaction.NewBeefFromBytes(inputBeefBytes); err != nil {
+			return admit, err
+		} else if err := beef.MergeBeef(inputBeef); err != nil {
+			return admit, err
+		}
+	}
 
 	ancillaryTxids := make(map[string]struct{})
-	for vin, inputBeef := range previousCoins {
-		sourceTx, err := transaction.NewTransactionFromBEEF(inputBeef)
-		if err != nil {
+	for vin, _ := range previousCoins {
+		if tx.Inputs[vin].SourceTransaction == nil {
 			return admit, err
 		}
 		txin := tx.Inputs[vin]
-		txout := sourceTx.Outputs[txin.SourceTxOutIndex]
+		txout := tx.Inputs[vin].SourceTransaction.Outputs[txin.SourceTxOutIndex]
 		if o := opns.Decode(txout.LockingScript); o != nil || txin.SourceTXID.Equal(opns.GENESIS.Txid) {
 			admit.CoinsToRetain = append(admit.CoinsToRetain, vin)
 			admit.OutputsToAdmit = []uint32{0, 1, 2}
