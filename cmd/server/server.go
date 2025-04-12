@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/4chain-ag/go-overlay-services/pkg/appconfig"
 	"github.com/4chain-ag/go-overlay-services/pkg/core/engine"
@@ -28,6 +29,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
+	"github.com/valyala/fasthttp"
 )
 
 var chaintracker headers_client.Client
@@ -37,8 +39,8 @@ var rdb, sub *redis.Client
 var peers = []string{}
 
 type subRequest struct {
-	topics []string
-	writer *bufio.Writer
+	topics  []string
+	msgChan chan *redis.Message
 }
 
 var subscribe = make(chan *subRequest, 100)   // Buffered channel
@@ -211,18 +213,42 @@ func main() {
 				c.Set("Content-Type", "text/event-stream")
 				c.Set("Cache-Control", "no-cache")
 				c.Set("Connection", "keep-alive")
+				c.Set("Transfer-Encoding", "chunked")
 
 				// Add the client to the topicClients map
-				writer := bufio.NewWriter(c.Context().Response.BodyWriter())
+				// writer := c.Context().Response.BodyWriter()
 				subReq := &subRequest{
-					topics: topics,
-					writer: writer,
+					topics:  topics,
+					msgChan: make(chan *redis.Message, 25),
 				}
 				subscribe <- subReq
-
-				// Wait for the client to disconnect
-				<-c.Context().Done()
-				unsubscribe <- subReq
+				ctx := c.Context()
+				c.Response().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
+					// fmt.Println("WRITER")
+					var i int
+					// defer fmt.Println("CLOSING")
+					for {
+						select {
+						case <-ctx.Done():
+							unsubscribe <- subReq
+							return
+						case msg := <-subReq.msgChan:
+							i++
+							fmt.Fprintf(w, "id: %d\n", time.Now().UnixNano())
+							fmt.Fprintf(w, "event: %s\n", msg.Channel)
+							fmt.Fprintf(w, "data: %s\n\n", msg.Payload)
+							err := w.Flush()
+							if err != nil {
+								// Refreshing page in web browser will establish a new
+								// SSE connection, but only (the last) one is alive, so
+								// dead connections must be closed here.
+								// fmt.Printf("Error while flushing: %v. Closing http connection.\n", err)
+								unsubscribe <- subReq
+								return
+							}
+						}
+					}
+				}))
 
 				log.Println("Client disconnected:", topics)
 				return nil
@@ -242,7 +268,7 @@ func main() {
 		pubSubChan := pubSub.Channel() // Subscribe to all topics
 		defer pubSub.Close()
 
-		topicClients := make(map[string][]*bufio.Writer) // Map of topic to connected clients
+		topicChannels := make(map[string][]chan *redis.Message) // Map of topic to connected clients
 
 		for {
 			select {
@@ -252,33 +278,25 @@ func main() {
 
 			case msg := <-pubSubChan:
 				// Broadcast the message to all clients subscribed to the topic
-				if clients, exists := topicClients[msg.Channel]; exists {
-					for _, client := range clients {
-						parts := strings.Split(msg.Payload, ":")
-						if len(parts) != 2 {
-							log.Println("Invalid message format:", msg.Payload)
-							continue
-						}
-						_, _ = fmt.Fprintf(client, "event: %s\n", msg.Channel)
-						_, _ = fmt.Fprintf(client, "data: %s\n", parts[1])
-						_, _ = fmt.Fprintf(client, "id: %s\n\n", parts[0])
-						_ = client.Flush()
+				if channels, exists := topicChannels[msg.Channel]; exists {
+					for _, channel := range channels {
+						channel <- msg
 					}
 				}
 
 			case subReq := <-subscribe:
 				// Add the client to the topicClients map
 				for _, topic := range subReq.topics {
-					topicClients[topic] = append(topicClients[topic], subReq.writer)
+					topicChannels[topic] = append(topicChannels[topic], subReq.msgChan)
 				}
 
 			case subReq := <-unsubscribe:
 				// Remove the client from the topicClients map
 				for _, topic := range subReq.topics {
-					clients := topicClients[topic]
-					for i, client := range clients {
-						if client == subReq.writer {
-							topicClients[topic] = append(clients[:i], clients[i+1:]...)
+					channels := topicChannels[topic]
+					for i, c := range channels {
+						if c == subReq.msgChan {
+							topicChannels[topic] = append(channels[:i], channels[i+1:]...)
 							break
 						}
 					}
@@ -313,9 +331,12 @@ func main() {
 	}()
 
 	if SYNC {
-		if err := e.StartGASPSync(context.Background()); err != nil {
-			log.Fatalf("Error starting sync: %v", err)
-		}
+		go func() {
+			if err := e.StartGASPSync(context.Background()); err != nil {
+				log.Fatalf("Error starting sync: %v", err)
+			}
+			// Todo: Subscribe to topics via SSE
+		}()
 	}
 	// Start the server on the specified port
 	<-http.StartWithGracefulShutdown(ctx)

@@ -21,13 +21,10 @@ func (tm *TopicManager) IdentifyAdmissableOutputs(ctx context.Context, beefBytes
 		return admit, err
 	} else if tx == nil {
 		return admit, errors.New("transaction is nil")
-	}
-
-	if txid.Equal(opns.GENESIS.Txid) {
+	} else if txid.Equal(opns.GENESIS.Txid) {
 		admit.OutputsToAdmit = append(admit.OutputsToAdmit, 0)
 		return
-	}
-	if len(previousCoins) == 0 {
+	} else if len(previousCoins) == 0 {
 		return
 	}
 
@@ -82,8 +79,8 @@ func (tm *TopicManager) IdentifyAdmissableOutputs(ctx context.Context, beefBytes
 	return
 }
 
-func (tm *TopicManager) IdentifyNeededInputs(ctx context.Context, beefBytes []byte) ([]*overlay.Outpoint, error) {
-	return []*overlay.Outpoint{}, nil
+func (tm *TopicManager) IdentifyNeededInputs(ctx context.Context, beefBytes []byte) (neededInputs []*overlay.Outpoint, err error) {
+	return neededInputs, nil
 }
 
 func (tm *TopicManager) GetDocumentation() string {
