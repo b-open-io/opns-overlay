@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/b-open-io/opns-overlay/cmd/paymail/paymail"
 	"github.com/b-open-io/opns-overlay/opns"
 	"github.com/b-open-io/overlay/storage"
 	"github.com/b-open-io/overlay/util"
@@ -37,7 +38,7 @@ func main() {
 	}
 
 	sl := server.PaymailServiceLocator{}
-	serviceProvider := &OpnsServiceProvider{
+	serviceProvider := &paymail.OpnsServiceProvider{
 		Lookup: lookupService,
 	}
 	sl.RegisterPaymailService(serviceProvider)
