@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -60,6 +61,7 @@ func main() {
 		server.WithGenericCapabilities(),
 		server.WithPort(PORT),
 		server.WithTimeout(15 * time.Second),
+		server.WithDomain(fmt.Sprintf("localhost:%d", PORT)),
 		// server.WithCapabilities(customCapabilities()),
 	}
 	for _, domain := range strings.Split(paymailDomain, ",") {
@@ -80,6 +82,7 @@ func main() {
 	config.Prefix = "https://" //normally paymail requires https, but for demo purposes we'll use http
 
 	// Create & start the server
-	server.StartServer(server.CreateServer(config), config.Logger)
+	s := server.CreateServer(config)
+	server.StartServer(s, config.Logger)
 
 }

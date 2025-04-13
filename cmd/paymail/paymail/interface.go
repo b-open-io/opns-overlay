@@ -10,6 +10,7 @@ import (
 	"github.com/bitcoin-sv/go-paymail/server"
 	"github.com/bitcoin-sv/go-paymail/spv"
 	"github.com/bsv-blockchain/go-sdk/script"
+	"github.com/bsv-blockchain/go-sdk/transaction"
 	"github.com/bsv-blockchain/go-sdk/transaction/template/p2pkh"
 )
 
@@ -111,9 +112,25 @@ func (d *OpnsServiceProvider) CreateP2PDestinationResponse(ctx context.Context, 
 // RecordTransaction is a demo implementation of this interface
 func (d *OpnsServiceProvider) RecordTransaction(ctx context.Context,
 	p2pTx *paymail.P2PTransaction, _ *server.RequestMetadata,
-) (*paymail.P2PTransactionPayload, error) {
+) (payload *paymail.P2PTransactionPayload, err error) {
+	var tx *transaction.Transaction
+	payload = &paymail.P2PTransactionPayload{
+		Note: "Transaction recorded",
+	}
+	if p2pTx.Beef != "" {
+		if tx, err = transaction.NewTransactionFromBEEFHex(p2pTx.Beef); err != nil {
+			return nil, err
+		}
+	} else if p2pTx.Hex == "" {
+		if tx, err = transaction.NewTransactionFromHex(p2pTx.Hex); err != nil {
+			return nil, err
+		}
+	} else {
+		return nil, errors.New("no beef or hex provided")
+	}
+	payload.TxID = tx.TxID().String()
+	return payload, nil
 	// Record the tx into your datastore layer
-	return nil, nil
 }
 
 // VerifyMerkleRoots is a demo implementation of this interface
