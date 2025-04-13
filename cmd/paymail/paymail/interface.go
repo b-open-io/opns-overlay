@@ -121,7 +121,7 @@ func (d *OpnsServiceProvider) RecordTransaction(ctx context.Context,
 		if tx, err = transaction.NewTransactionFromBEEFHex(p2pTx.Beef); err != nil {
 			return nil, err
 		}
-	} else if p2pTx.Hex == "" {
+	} else if p2pTx.Hex != "" {
 		if tx, err = transaction.NewTransactionFromHex(p2pTx.Hex); err != nil {
 			return nil, err
 		}
