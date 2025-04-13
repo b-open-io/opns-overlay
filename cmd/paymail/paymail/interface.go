@@ -2,8 +2,11 @@ package paymail
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"time"
 
 	"github.com/b-open-io/opns-overlay/opns"
 	"github.com/bitcoin-sv/go-paymail"
@@ -102,9 +105,12 @@ func (d *OpnsServiceProvider) CreateP2PDestinationResponse(ctx context.Context, 
 	} else {
 		output.Script = hex.EncodeToString(*lockingScript)
 		// Create the response
+		ref := make([]byte, 16)
+		rand.Read(ref)
+		d.Lookup.Db.Set(ctx, fmt.Sprintf("pay:%x", ref), alias, time.Minute).Err()
 		return &paymail.PaymentDestinationPayload{
 			Outputs:   []*paymail.PaymentOutput{output},
-			Reference: "1234567890", // todo: this should be unique per request
+			Reference: hex.EncodeToString(ref),
 		}, nil
 	}
 }
