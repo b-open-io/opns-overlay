@@ -23,9 +23,6 @@ import (
 	"github.com/bsv-blockchain/go-sdk/transaction/broadcaster"
 	"github.com/bsv-blockchain/go-sdk/transaction/chaintracker/headers_client"
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/compress"
-	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 	"github.com/valyala/fasthttp"
@@ -123,138 +120,10 @@ func main() {
 	}
 
 	httpServer, err := server.New(
-		server.WithFiberMiddleware(logger.New()),
-		server.WithFiberMiddleware(compress.New()),
-		server.WithFiberMiddleware(cors.New(cors.Config{AllowOrigins: "*"})),
 		server.WithEngine(e),
-		server.WithRouter(func(r fiber.Router) {
-			r.Get("", func(c *fiber.Ctx) error {
-				return c.SendString("Hello, World!")
-			})
-			r.Get("/owner/:name", func(c *fiber.Ctx) error {
-				name := c.Params("name")
-				if name == "" {
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "Missing name",
-					})
-				} else if owner, err := lookupService.Owner(c.Context(), name); err != nil {
-					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-						"error": err.Error(),
-					})
-				} else if owner == nil {
-					return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-						"error": "No owner found",
-					})
-				} else {
-					return c.JSON(owner)
-				}
-			})
+		// server.WithRouter(func(r fiber.Router) {
 
-			r.Get("/mine/:name", func(c *fiber.Ctx) error {
-				name := c.Params("name")
-				if name == "" {
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "Missing name",
-					})
-				} else if outpoint, err := lookupService.Mine(c.Context(), name); err != nil {
-					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-						"error": err.Error(),
-					})
-				} else if outpoint == nil {
-					return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-						"error": "No outpoint found",
-					})
-				} else {
-					return c.JSON(fiber.Map{
-						"outpoint": outpoint,
-					})
-				}
-			})
-
-			r.Post("/arc-ingest", func(c *fiber.Ctx) error {
-				var status broadcaster.ArcResponse
-				if err := c.BodyParser(&status); err != nil {
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "Invalid request",
-					})
-				} else if txid, err := chainhash.NewHashFromHex(status.Txid); err != nil {
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "Invalid txid",
-					})
-				} else if merklePath, err := transaction.NewMerklePathFromHex(status.MerklePath); err != nil {
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "Invalid merkle path",
-					})
-				} else if err := e.HandleNewMerkleProof(c.Context(), txid, merklePath); err != nil {
-					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-						"error": err.Error(),
-					})
-				} else {
-					return c.JSON(fiber.Map{
-						"status": "success",
-					})
-				}
-			})
-
-			r.Get("/subscribe/:topics", func(c *fiber.Ctx) error {
-				topicsParam := c.Params("topics")
-				if topicsParam == "" {
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "Missing topics",
-					})
-				}
-				topics := strings.Split(topicsParam, ",")
-				if len(topics) == 0 {
-					return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-						"error": "No topics provided",
-					})
-				}
-
-				// Set headers for SSE
-				c.Set("Content-Type", "text/event-stream")
-				c.Set("Cache-Control", "no-cache")
-				c.Set("Connection", "keep-alive")
-				c.Set("Transfer-Encoding", "chunked")
-
-				// Add the client to the topicClients map
-				// writer := c.Context().Response.BodyWriter()
-				subReq := &subRequest{
-					topics:  topics,
-					msgChan: make(chan *redis.Message, 25),
-				}
-				subscribe <- subReq
-				ctx := c.Context()
-				c.Response().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
-					// fmt.Println("WRITER")
-					var i int
-					// defer fmt.Println("CLOSING")
-					for {
-						select {
-						case <-ctx.Done():
-							unsubscribe <- subReq
-							return
-						case msg := <-subReq.msgChan:
-							i++
-							fmt.Fprintf(w, "id: %d\n", time.Now().UnixNano())
-							fmt.Fprintf(w, "event: %s\n", msg.Channel)
-							fmt.Fprintf(w, "data: %s\n\n", msg.Payload)
-							err := w.Flush()
-							if err != nil {
-								// Refreshing page in web browser will establish a new
-								// SSE connection, but only (the last) one is alive, so
-								// dead connections must be closed here.
-								// fmt.Printf("Error while flushing: %v. Closing http connection.\n", err)
-								unsubscribe <- subReq
-								return
-							}
-						}
-					}
-				}))
-
-				log.Println("Client disconnected:", topics)
-				return nil
-			})
-		}),
+		// }),
 		server.WithConfig(&server.Config{
 			Port: PORT,
 		}),
@@ -262,6 +131,133 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create server: %v", err)
 	}
+
+	httpServer.Router.Get("", func(c *fiber.Ctx) error {
+		return c.SendString("Hello, World!")
+	})
+	httpServer.Router.Get("/owner/:name", func(c *fiber.Ctx) error {
+		name := c.Params("name")
+		if name == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Missing name",
+			})
+		} else if owner, err := lookupService.Owner(c.Context(), name); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		} else if owner == nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "No owner found",
+			})
+		} else {
+			return c.JSON(owner)
+		}
+	})
+
+	httpServer.Router.Get("/mine/:name", func(c *fiber.Ctx) error {
+		name := c.Params("name")
+		if name == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Missing name",
+			})
+		} else if outpoint, err := lookupService.Mine(c.Context(), name); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		} else if outpoint == nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "No outpoint found",
+			})
+		} else {
+			return c.JSON(fiber.Map{
+				"outpoint": outpoint,
+			})
+		}
+	})
+
+	httpServer.Router.Post("/arc-ingest", func(c *fiber.Ctx) error {
+		var status broadcaster.ArcResponse
+		if err := c.BodyParser(&status); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid request",
+			})
+		} else if txid, err := chainhash.NewHashFromHex(status.Txid); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid txid",
+			})
+		} else if merklePath, err := transaction.NewMerklePathFromHex(status.MerklePath); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid merkle path",
+			})
+		} else if err := e.HandleNewMerkleProof(c.Context(), txid, merklePath); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		} else {
+			return c.JSON(fiber.Map{
+				"status": "success",
+			})
+		}
+	})
+
+	httpServer.Router.Get("/subscribe/:topics", func(c *fiber.Ctx) error {
+		topicsParam := c.Params("topics")
+		if topicsParam == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Missing topics",
+			})
+		}
+		topics := strings.Split(topicsParam, ",")
+		if len(topics) == 0 {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "No topics provided",
+			})
+		}
+
+		// Set headers for SSE
+		c.Set("Content-Type", "text/event-stream")
+		c.Set("Cache-Control", "no-cache")
+		c.Set("Connection", "keep-alive")
+		c.Set("Transfer-Encoding", "chunked")
+
+		// Add the client to the topicClients map
+		// writer := c.Context().Response.BodyWriter()
+		subReq := &subRequest{
+			topics:  topics,
+			msgChan: make(chan *redis.Message, 25),
+		}
+		subscribe <- subReq
+		ctx := c.Context()
+		c.Response().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
+			// fmt.Println("WRITER")
+			var i int
+			// defer fmt.Println("CLOSING")
+			for {
+				select {
+				case <-ctx.Done():
+					unsubscribe <- subReq
+					return
+				case msg := <-subReq.msgChan:
+					i++
+					fmt.Fprintf(w, "id: %d\n", time.Now().UnixNano())
+					fmt.Fprintf(w, "event: %s\n", msg.Channel)
+					fmt.Fprintf(w, "data: %s\n\n", msg.Payload)
+					err := w.Flush()
+					if err != nil {
+						// Refreshing page in web browser will establish a new
+						// SSE connection, but only (the last) one is alive, so
+						// dead connections must be closed here.
+						// fmt.Printf("Error while flushing: %v. Closing http connection.\n", err)
+						unsubscribe <- subReq
+						return
+					}
+				}
+			}
+		}))
+
+		log.Println("Client disconnected:", topics)
+		return nil
+	})
 
 	// Start the Redis PubSub goroutine
 	go func() {

@@ -1,5 +1,5 @@
-github.com/4chain-ag/go-overlay-services v0.1.1-0.20250412194115-287856fda02b h1:59TBDfDdRmmjSduhWdVGz27rVpn0zim4UdWeA70URNg=
-github.com/4chain-ag/go-overlay-services v0.1.1-0.20250412194115-287856fda02b/go.mod h1:llOgyY1yGryUmLiRjKaXS2dEwo0uZCpJMiJJ+xjwEhQ=
+github.com/4chain-ag/go-overlay-services v0.1.1-0.20250414144451-bc2401837c31 h1:8X04hoTU1pLzpsCkwwewKQMPrvh23pjBHzLdUe0fo5M=
+github.com/4chain-ag/go-overlay-services v0.1.1-0.20250414144451-bc2401837c31/go.mod h1:llOgyY1yGryUmLiRjKaXS2dEwo0uZCpJMiJJ+xjwEhQ=
 github.com/GorillaPool/go-junglebus v0.2.14 h1:dnGU3LIZ21JiHeeSRW0Yn5xvSHKgiN0T/t3cioABtyg=
 github.com/GorillaPool/go-junglebus v0.2.14/go.mod h1:EMAAnFQbBQB7xLe7DdLTLbescKUudflsXT0CqlSeWgQ=
 github.com/andybalholm/brotli v1.1.1 h1:PR2pgnyFznKEugtsUo0xLdDop5SKXd5Qf5ysW+7XdTA=
