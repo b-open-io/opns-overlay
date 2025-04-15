@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/4chain-ag/go-overlay-services/pkg/core/engine"
-	"github.com/GorillaPool/go-junglebus"
 	"github.com/b-open-io/opns-overlay/opns"
 	"github.com/b-open-io/overlay/storage"
 	"github.com/b-open-io/overlay/util"
@@ -28,22 +27,19 @@ import (
 )
 
 var JUNGLEBUS = "https://texas1.junglebus.gorillapool.io"
-var jb *junglebus.Client
 var chaintracker headers_client.Client
 var SPENDS = false
+var HISTORY = false
 var CONCURRENCY = 1
+var rdb *redis.Client
 
 type tokenSummary struct {
-	tx   int
-	out  int
-	time time.Duration
+	tx  int
+	out int
 }
 
 func init() {
 	godotenv.Load("../../.env")
-	jb, _ = junglebus.New(
-		junglebus.WithHTTP(JUNGLEBUS),
-	)
 	chaintracker = headers_client.Client{
 		Url:    os.Getenv("BLOCK_HEADERS_URL"),
 		ApiKey: os.Getenv("BLOCK_HEADERS_API_KEY"),
@@ -51,7 +47,8 @@ func init() {
 }
 
 func main() {
-	flag.BoolVar(&SPENDS, "s", false, "Start sync")
+	flag.BoolVar(&HISTORY, "h", true, "History Sync")
+	flag.BoolVar(&SPENDS, "s", false, "Spends Sync")
 	flag.IntVar(&CONCURRENCY, "c", 1, "Concurrency")
 	flag.Parse()
 
@@ -67,7 +64,6 @@ func main() {
 		cancel()
 	}()
 
-	var rdb *redis.Client
 	log.Println("Connecting to Redis", os.Getenv("REDIS"))
 	if opts, err := redis.ParseURL(os.Getenv("REDIS")); err != nil {
 		log.Fatalf("Failed to parse Redis URL: %v", err)
@@ -94,9 +90,10 @@ func main() {
 		log.Fatalf("Failed to initialize lookup service: %v", err)
 	}
 	tm := "tm_OpNS"
+	opNsTopicManager := opns.TopicManager{}
 	e := engine.Engine{
 		Managers: map[string]engine.TopicManager{
-			tm: &opns.TopicManager{},
+			tm: &opNsTopicManager,
 		},
 		LookupServices: map[string]engine.LookupService{
 			"ls_OpNS": lookupService,
@@ -123,52 +120,70 @@ func main() {
 				wg.Add(len(outpoints))
 				log.Println()
 				for _, op := range outpoints {
-					limiter <- struct{}{}
-					go func(op string) {
-						defer func() { <-limiter }()
-						defer wg.Done()
-						if outpoint, err := overlay.NewOutpointFromString(op); err != nil {
-							log.Fatalf("Invalid outpoint: %v", err)
-						} else if isSpent, err := rdb.HGet(ctx, storage.OutputTopicKey(outpoint, tm), "sp").Bool(); err != nil {
-							log.Fatalf("Failed to get spent status: %v", err)
-						} else if !isSpent {
-							log.Println("Checking spend for", outpoint)
-							if spend, err := lookupSpend(&overlay.Outpoint{
-								Txid:        outpoint.Txid,
-								OutputIndex: outpoint.OutputIndex,
-							}); err != nil {
-								log.Fatalf("Failed to lookup spend: %v", err)
-							} else if spend != nil {
-								log.Println("Found spend. Queing", spend)
-								if err := rdb.ZAdd(ctx, "opns", redis.Z{
-									Score:  float64(time.Now().UnixNano()),
-									Member: spend.String(),
-								}).Err(); err != nil {
-									log.Fatalf("Failed to add spend to queue: %v", err)
+					select {
+					case <-ctx.Done():
+						log.Println("Context canceled, stopping processing...")
+						return
+					default:
+						limiter <- struct{}{}
+						go func(op string) {
+							defer func() { <-limiter }()
+							defer wg.Done()
+							if outpoint, err := overlay.NewOutpointFromString(op); err != nil {
+								log.Fatalf("Invalid outpoint: %v", err)
+							} else if isSpent, err := rdb.HGet(ctx, storage.OutputTopicKey(outpoint, tm), "sp").Bool(); err != nil {
+								log.Fatalf("Failed to get spent status: %v", err)
+							} else if !isSpent {
+								// log.Println("Checking spend for", outpoint)
+								if spend, err := lookupSpend(ctx, &overlay.Outpoint{
+									Txid:        outpoint.Txid,
+									OutputIndex: outpoint.OutputIndex,
+								}); err != nil {
+									log.Fatalf("Failed to lookup spend: %v", err)
+								} else if spend != nil {
+									if exists, err := store.DoesAppliedTransactionExist(ctx, &overlay.AppliedTransaction{
+										Txid:  spend,
+										Topic: tm,
+									}); err != nil {
+										log.Fatalf("Failed to check if transaction exists: %v", err)
+									} else if !exists {
+										log.Println("Found spend for", outpoint, ":", spend, "queuing for processing")
+										queue <- &outpoint.Txid
+										// if err := rdb.ZAdd(ctx, "opns", redis.Z{
+										// 	Score:  float64(time.Now().UnixNano()),
+										// 	Member: spend.String(),
+										// }).Err(); err != nil {
+										// 	log.Fatalf("Failed to add spend to queue: %v", err)
+										// }
+									} else {
+										log.Println("Already processed spend for", outpoint, ":", spend)
+									}
 								}
 							}
-						}
-					}(op)
+						}(op)
+					}
 				}
 			}
 			wg.Wait()
 			log.Println("Finished syncing spends")
 		}
-		txids, err := rdb.ZRangeArgs(ctx, redis.ZRangeArgs{
-			Key:     "opns",
-			Stop:    "+inf",
-			Start:   "-inf",
-			ByScore: true,
-		}).Result()
-		if err != nil {
-			log.Fatalf("Failed to query Redis: %v", err)
-		}
-		txids = append([]string{"58b7558ea379f24266c7e2f5fe321992ad9a724fd7a87423ba412677179ccb25"}, txids...)
-		for _, txidStr := range txids {
-			if txid, err := chainhash.NewHashFromHex(txidStr); err != nil {
-				log.Fatalf("Invalid txid: %v", err)
-			} else {
-				queue <- txid
+		if HISTORY {
+			txids, err := rdb.ZRangeArgs(ctx, redis.ZRangeArgs{
+				Key:     "opns",
+				Stop:    "+inf",
+				Start:   "-inf",
+				ByScore: true,
+			}).Result()
+			if err != nil {
+				log.Fatalf("Failed to query Redis: %v", err)
+			}
+			txids = append([]string{"58b7558ea379f24266c7e2f5fe321992ad9a724fd7a87423ba412677179ccb25"}, txids...)
+			for _, txidStr := range txids {
+				if txid, err := chainhash.NewHashFromHex(txidStr); err != nil {
+					log.Fatalf("Invalid txid: %v", err)
+				} else {
+					queue <- txid
+				}
 			}
 		}
 	}()
@@ -200,9 +215,7 @@ func main() {
 				defer func() { <-limiter }()
 				txidStr := txid.String()
 				// log.Println("Processing", txidStr)
-				if txid, err := chainhash.NewHashFromHex(txidStr); err != nil {
-					log.Fatalf("Invalid txid: %v", err)
-				} else if tx, err := txStore.LoadTx(ctx, txid); err != nil {
+				if tx, err := txStore.LoadTx(ctx, txid); err != nil {
 					log.Fatalf("Failed to load transaction: %v", err)
 				} else {
 					logTime := time.Now()
@@ -230,22 +243,22 @@ func main() {
 					} else if admit, err := e.Submit(ctx, taggedBeef, engine.SubmitModeHistorical, nil); err != nil {
 						log.Fatalf("Failed to submit transaction: %v", err)
 					} else {
-						// for _, vout := range admit[tm].OutputsToAdmit {
-						// 	if spend, err := lookupSpend(&overlay.Outpoint{
-						// 		Txid:        *txid,
-						// 		OutputIndex: vout,
-						// 	}); err != nil {
-						// 		log.Fatalf("Failed to lookup spend: %v", err)
-						// 	} else if spend != nil {
-						// 		if err := rdb.ZAdd(ctx, "opns", redis.Z{
-						// 			Score:  float64(time.Now().UnixNano()),
-						// 			Member: spend.String(),
-						// 		}).Err(); err != nil {
-						// 			log.Fatalf("Failed to add spend to queue: %v", err)
-						// 		}
-						// 		queue <- spend
-						// 	}
-						// }
+						for _, vout := range admit[tm].OutputsToAdmit {
+							if spend, err := lookupSpend(ctx, &overlay.Outpoint{
+								Txid:        *txid,
+								OutputIndex: vout,
+							}); err != nil {
+								log.Fatalf("Failed to lookup spend: %v", err)
+							} else if spend != nil {
+								// if err := rdb.ZAdd(ctx, "opns", redis.Z{
+								// 	Score:  float64(time.Now().UnixNano()),
+								// 	Member: spend.String(),
+								// }).Err(); err != nil {
+								// 	log.Fatalf("Failed to add spend to queue: %v", err)
+								// }
+								queue <- spend
+							}
+						}
 						if err := rdb.ZRem(ctx, "opns", txidStr).Err(); err != nil {
 							log.Fatalf("Failed to delete from queue: %v", err)
 						}
@@ -265,8 +278,12 @@ func main() {
 
 }
 
-func lookupSpend(outpoint *overlay.Outpoint) (*chainhash.Hash, error) {
-	if resp, err := http.Get(fmt.Sprintf("%s/v1/txo/spend/%s", os.Getenv("JUNGLEBUS"), outpoint.OrdinalString())); err != nil {
+func lookupSpend(ctx context.Context, outpoint *overlay.Outpoint) (*chainhash.Hash, error) {
+	if spend, err := rdb.HGet(ctx, storage.SpendsKey, outpoint.String()).Result(); err != nil && err != redis.Nil {
+		return nil, err
+	} else if spend != "" {
+		return chainhash.NewHashFromHex(spend)
+	} else if resp, err := http.Get(fmt.Sprintf("%s/v1/txo/spend/%s", os.Getenv("JUNGLEBUS"), outpoint.OrdinalString())); err != nil {
 		return nil, err
 	} else {
 		defer resp.Body.Close()
